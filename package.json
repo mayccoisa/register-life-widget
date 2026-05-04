@@ -1,0 +1,55 @@
+{
+  "name": "register-life-widget",
+  "version": "0.4.0",
+  "description": "Widget desktop do Register Life — timer de tarefas e pomodoro",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:icons": "node scripts/build-icons.js",
+    "build": "npm run build:icons && electron-builder",
+    "build:win": "npm run build:icons && electron-builder --win",
+    "publish:win": "npm run build:icons && electron-builder --win --publish always"
+  },
+  "author": "Maycon",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "build": {
+    "appId": "com.weon.registerlife.widget",
+    "productName": "Register Life Widget",
+    "copyright": "Copyright © 2026 Weon",
+    "files": [
+      "src/**/*",
+      "build/icon.*",
+      "!**/*.map",
+      "!**/__tests__/**",
+      "!**/*.md"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "RegisterLifeWidget-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Register Life Widget",
+      "uninstallDisplayName": "Register Life Widget"
+    }
+  }
+}

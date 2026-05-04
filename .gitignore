@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+.env
+.env.local
+
+# Ícones gerados pelo script build:icons
+build/icon.png
+build/icon.ico
+
+# Configurações locais
+.claude/

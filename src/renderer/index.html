@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Register Life Widget</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="titlebar">
+    <button id="btn-back" class="titlebar-back" title="Voltar" hidden>‹</button>
+    <div class="title" id="title">Register Life</div>
+    <div class="actions">
+      <button id="btn-theme" title="Alternar tema claro/escuro">🌙</button>
+      <button id="btn-pomodoro" title="Pomodoro" hidden>🍅</button>
+      <button id="btn-refresh" title="Atualizar" hidden>↻</button>
+      <button id="btn-logout" title="Sair da conta" hidden>⎋</button>
+      <button id="btn-hide" title="Ocultar (Ctrl+Shift+T)">—</button>
+      <button id="btn-quit" title="Fechar app">×</button>
+    </div>
+  </header>
+
+  <!-- Timer global de tarefa — fica visível em qualquer tela -->
+  <div id="global-timer" class="global-timer" hidden>
+    <div class="gt-info">
+      <div class="gt-label" id="gt-label"></div>
+      <div class="gt-value" id="gt-value">00:00:00</div>
+    </div>
+    <div class="gt-controls">
+      <button id="btn-pause-resume" class="btn-ghost" title="Pausar/Retomar">⏸</button>
+      <button id="btn-stop" class="btn-ghost" title="Parar">⏹</button>
+    </div>
+  </div>
+
+  <main id="content">
+    <!-- Loading -->
+    <section id="screen-loading" class="screen active">
+      <div class="placeholder">
+        <div class="spinner"></div>
+        <p class="muted">Carregando…</p>
+      </div>
+    </section>
+
+    <!-- Login -->
+    <section id="screen-login" class="screen">
+      <form id="login-form" class="login-form">
+        <h2>Entrar</h2>
+        <label>
+          <span>Email</span>
+          <input type="email" id="login-email" autocomplete="email" required />
+        </label>
+        <label>
+          <span>Senha</span>
+          <input type="password" id="login-password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" id="login-submit" class="btn-primary">Entrar</button>
+        <p id="login-error" class="error" hidden></p>
+      </form>
+    </section>
+
+    <!-- Workspaces -->
+    <section id="screen-workspaces" class="screen">
+      <div id="error-banner-ws" class="error-banner" hidden></div>
+      <ul id="workspace-list" class="workspace-list"></ul>
+    </section>
+
+    <!-- Tasks -->
+    <section id="screen-tasks" class="screen">
+      <div id="error-banner" class="error-banner" hidden></div>
+
+      <div class="task-toolbar">
+        <button id="btn-sort" class="toolbar-btn" title="Ordenar">
+          <span class="tb-icon">⇅</span><span id="sort-label">Ordem</span>
+        </button>
+        <button id="btn-filter-type" class="toolbar-btn" title="Filtrar por tipo">
+          <span class="tb-icon">▤</span><span id="filter-type-label">Tipo</span>
+        </button>
+        <button id="btn-filter-category" class="toolbar-btn" title="Filtrar por categoria">
+          <span class="tb-icon">◉</span><span id="filter-category-label">Categoria</span>
+        </button>
+      </div>
+
+      <!-- Menus dropdown -->
+      <div id="sort-menu" class="dropdown-menu" hidden>
+        <button data-sort="default">Padrão</button>
+        <button data-sort="date_asc">Data ↑ (mais próxima)</button>
+        <button data-sort="date_desc">Data ↓ (mais distante)</button>
+        <button data-sort="title_asc">Título A→Z</button>
+        <button data-sort="title_desc">Título Z→A</button>
+        <button data-sort="time_desc">Mais tempo gasto</button>
+      </div>
+      <div id="filter-type-menu" class="dropdown-menu" hidden></div>
+      <div id="filter-category-menu" class="dropdown-menu" hidden></div>
+
+      <ul id="task-list" class="task-list"></ul>
+    </section>
+
+    <!-- Task Details -->
+    <section id="screen-details" class="screen">
+      <div class="details-body" id="details-body"></div>
+      <div class="details-actions">
+        <button id="btn-start-task" class="btn-primary">▶ Iniciar timer</button>
+      </div>
+    </section>
+
+    <!-- Pomodoro -->
+    <section id="screen-pomodoro" class="screen">
+      <div id="error-banner-pomo" class="error-banner" hidden></div>
+
+      <div class="pomo-display">
+        <div class="pomo-phase" id="pomo-phase">FOCO</div>
+        <div class="pomo-time" id="pomo-time">25:00</div>
+        <div class="pomo-controls">
+          <button id="pomo-start" class="btn-primary">Iniciar</button>
+          <button id="pomo-pause" class="btn-ghost" title="Pausar">⏸</button>
+          <button id="pomo-resume" class="btn-ghost" title="Retomar" hidden>▶</button>
+          <button id="pomo-reset" class="btn-ghost" title="Resetar">↺</button>
+          <button id="pomo-stop" class="btn-ghost" title="Parar">⏹</button>
+        </div>
+      </div>
+
+      <div class="pomo-config">
+        <label>
+          <span>Foco (min)</span>
+          <input type="number" id="pomo-focus-min" min="1" max="120" value="25" />
+        </label>
+        <label>
+          <span>Pausa (min)</span>
+          <input type="number" id="pomo-break-min" min="1" max="60" value="5" />
+        </label>
+      </div>
+
+      <div class="pomo-section-title">Sessões recentes</div>
+      <ul id="pomo-history" class="pomo-history">
+        <li class="task-item placeholder-item">Carregando…</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status-text">v0.3.0</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
