@@ -1,6 +1,6 @@
 {
   "name": "register-life-widget",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Widget desktop do Register Life — timer de tarefas e pomodoro",
   "main": "src/main.js",
   "scripts": {
@@ -35,6 +35,15 @@
       "buildResources": "build",
       "output": "dist"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mayccoisa",
+        "repo": "register-life-widget",
+        "private": true,
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "target": [
         { "target": "nsis", "arch": ["x64"] }

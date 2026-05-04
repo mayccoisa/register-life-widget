@@ -5,6 +5,7 @@ const path = require('path');
 const api = require('./api');
 const auth = require('./auth');
 const { getTrayIcon, getAppIcon } = require('./icon');
+const updater = require('./updater');
 
 let mainWindow = null;
 let tray = null;
@@ -148,6 +149,9 @@ ipcMain.handle('app:notify', (_e, { title, body, silent }) => {
   notify(title, body, { silent });
 });
 
+ipcMain.handle('updater:check', () => updater.checkNow().catch(() => null));
+ipcMain.handle('updater:install', () => updater.quitAndInstall());
+
 ipcMain.handle('auth:status', safe(async () => {
   const token = await auth.getValidToken();
   if (!token) return { authenticated: false };
@@ -200,6 +204,11 @@ app.whenReady().then(() => {
     toggleWindow();
     if (mainWindow) mainWindow.webContents.send('global-shortcut:toggle-timer');
   });
+
+  // Auto-update — só faz sentido em build empacotado
+  if (app.isPackaged) {
+    try { updater.setup(mainWindow); } catch (e) { console.warn('[updater] falha ao iniciar:', e); }
+  }
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());

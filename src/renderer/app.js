@@ -1043,6 +1043,45 @@ window.widget.onGlobalToggleTimer(() => {
 });
 
 // ============================================================
+// Auto-update — banner reativo
+// ============================================================
+window.widget.updater.onStatus((s) => {
+  const banner = $('updater-banner');
+  const msg = $('updater-msg');
+  const action = $('updater-action');
+  if (!banner) return;
+
+  switch (s.state) {
+    case 'available':
+      banner.hidden = false;
+      msg.textContent = `Baixando v${s.version}…`;
+      action.hidden = true;
+      break;
+    case 'downloading':
+      banner.hidden = false;
+      msg.textContent = `Baixando atualização… ${Math.round(s.percent || 0)}%`;
+      action.hidden = true;
+      break;
+    case 'downloaded':
+      banner.hidden = false;
+      msg.textContent = `v${s.version} pronta — clique pra reiniciar`;
+      action.hidden = false;
+      action.textContent = 'Reiniciar agora';
+      action.onclick = () => window.widget.updater.install();
+      break;
+    case 'up-to-date':
+    case 'checking':
+      banner.hidden = true;
+      break;
+    case 'error':
+      // erro de update não atrapalha o uso — só esconde
+      banner.hidden = true;
+      console.warn('[updater] erro:', s.message);
+      break;
+  }
+});
+
+// ============================================================
 // Boot
 // ============================================================
 (async function boot() {

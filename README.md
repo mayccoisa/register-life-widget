@@ -1,52 +1,90 @@
 # Register Life Widget
 
-Widget desktop para Windows que se conecta ao Register Life para listar tarefas e cronometrar tempo gasto.
+Widget desktop Windows que se conecta ao Register Life para listar tarefas, cronometrar tempo gasto e gerenciar pomodoros — tudo numa janelinha sempre visível, com atalhos globais.
 
-## Status atual: Fase 1 — Esqueleto
+## Instalação (usuário final)
 
-- [x] Janela sempre no topo, sem moldura, ~340×480px
-- [x] Ícone na bandeja (system tray) com menu
-- [x] Atalho global `Ctrl+Shift+T` (mostra/oculta janela)
-- [x] Botões fechar/minimizar
-- [x] Tema escuro
-- [ ] **Fase 2**: Login + storage seguro do token (depende da API)
-- [ ] **Fase 3**: Lista de tarefas + mudar status
-- [ ] **Fase 4**: Timer (start/stop/pause) sincronizado
-- [ ] **Fase 5**: Auto-start no boot do Windows
-- [ ] **Fase 6**: Empacotar como `.exe` instalável
+1. Vá em **[Releases](https://github.com/mayccoisa/register-life-widget/releases)** e baixe o `.exe` mais recente
+2. Dois cliques pra instalar
+3. Faça login com sua conta do Register Life
+4. A partir daí, o app **se atualiza sozinho** — toda nova versão é baixada em background e instalada no próximo restart
 
-## Como rodar localmente
+> **Aviso de SmartScreen**: como o instalador não está assinado digitalmente, o Windows pode mostrar "Editor desconhecido". Clique em "Mais informações" → "Executar mesmo assim". Isso só acontece na primeira instalação.
+
+## Funcionalidades
+
+- 🔐 Login com email/senha (token criptografado via Windows DPAPI)
+- 📁 Workspaces — escolha obrigatória, lembra a última
+- ✅ Tarefas — lista, detalhes, mudança de status
+- ⏱️ Timer por tarefa — start/pause/resume/stop sincronizado com a API
+- 🍅 Pomodoro — foco/pausa configurável, histórico, transição automática
+- 🔍 Filtros (tipo, categoria) e ordenação (data, título, tempo)
+- 🌗 Tema claro/escuro
+- 🔔 Notificações nativas Windows
+- 🎨 Ícone na bandeja com cor dinâmica conforme estado
+- ⌨️ Atalho global `Ctrl+Shift+T` (mostra/oculta + pausa/retoma)
+- 🔄 Auto-update via GitHub Releases
+
+## Para desenvolvedores
 
 ```bash
+git clone https://github.com/mayccoisa/register-life-widget.git
+cd register-life-widget
 npm install
-npm start
+npm start              # rodar em modo dev
+npm run build:win      # gerar instalador local em dist/
 ```
 
-## Como gerar o `.exe` (Fase 6)
+## Como liberar uma nova versão
+
+O processo é totalmente automatizado pelo GitHub Actions:
 
 ```bash
-npm run build:win
+# 1. Bump da versão (escolha um):
+npm version patch    # 0.5.0 → 0.5.1 (bug fix)
+npm version minor    # 0.5.0 → 0.6.0 (nova feature)
+npm version major    # 0.5.0 → 1.0.0 (breaking change)
+
+# 2. Push das mudanças + tag
+git push --follow-tags
 ```
 
-O instalador sairá em `dist/`.
+Em ~5 minutos:
+
+1. GitHub Action builda o `.exe`
+2. Cria automaticamente uma release no GitHub com o instalador anexado
+3. Todos os widgets instalados detectam a nova versão na próxima abertura
+4. Baixam em background → mostram banner azul → usuário clica "Reiniciar agora"
 
 ## Estrutura
 
 ```
 src/
-├── main.js          # processo principal (janela, tray, atalhos)
-├── preload.js       # ponte segura main↔renderer
+├── main.js           # processo principal (janela, tray, atalhos, IPC)
+├── preload.js        # ponte segura main↔renderer
+├── api.js            # cliente HTTP do Register Life
+├── auth.js           # login + storage seguro (safeStorage)
+├── icon.js           # gera PNG/ICO em runtime (cores dinâmicas)
+├── updater.js        # auto-update via electron-updater
 └── renderer/
-    ├── index.html   # UI
-    ├── styles.css
-    └── app.js       # lógica da UI
+    ├── index.html    # UI
+    ├── styles.css    # tema escuro/claro
+    └── app.js        # lógica da UI
+
+scripts/
+└── build-icons.js    # gera build/icon.ico antes de empacotar
+
+.github/workflows/
+└── release.yml       # CI: builda e publica .exe ao push de tag v*
 ```
 
-## API necessária no Register Life
+## Stack
 
-Ver documento de especificação enviado ao time backend. Endpoints mínimos:
+- [Electron](https://www.electronjs.org/) 33
+- [electron-builder](https://www.electron.build/) 25 (NSIS installer)
+- [electron-updater](https://www.electron.build/auto-update) 6
+- API: Register Life (Supabase Edge Functions)
 
-- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`
-- `GET /tasks`, `PATCH /tasks/{id}/status`
-- `POST /tasks/{id}/timer/start|stop|pause|resume`
-- `GET /tasks/{id}/timer/active`
+## Licença
+
+Privado — Weon.

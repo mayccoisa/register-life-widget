@@ -224,6 +224,29 @@ main { flex: 1; overflow: hidden; position: relative; }
   border: 1px solid rgba(255, 92, 92, 0.3);
 }
 
+/* ---------- Updater banner ---------- */
+.updater-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.updater-banner button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.updater-banner button:hover { background: rgba(255, 255, 255, 0.3); }
+
 /* ---------- Error banner ---------- */
 .error-banner {
   background: rgba(255, 92, 92, 0.12);

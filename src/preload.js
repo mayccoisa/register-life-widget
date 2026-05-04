@@ -34,4 +34,10 @@ contextBridge.exposeInMainWorld('widget', {
     create: (payload) => invoke('pomodoro:create', payload),
     control: (action, extra) => invoke('pomodoro:control', { action, extra }),
   },
+
+  updater: {
+    check: () => invoke('updater:check'),
+    install: () => invoke('updater:install'),
+    onStatus: (cb) => ipcRenderer.on('updater:status', (_e, payload) => cb(payload)),
+  },
 });
