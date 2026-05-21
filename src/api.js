@@ -11,8 +11,9 @@ class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body, token } = {}) {
+async function request(path, { method = 'GET', body, token, apiKey } = {}) {
   const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) headers['X-API-Key'] = apiKey;
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const url = `${BASE_URL}${path}`;
@@ -51,36 +52,42 @@ module.exports = {
   logout: (token) =>
     request('/auth/logout', { method: 'POST', token }),
 
-  // Tasks
-  listTasks: (token) => request('/tasks', { token }),
+  // Tasks — usam X-API-Key
+  listTasks: (apiKey) => request('/tasks', { apiKey }),
 
-  getTask: (token, id) => request(`/tasks/${id}`, { token }),
+  getTask: (apiKey, id) => request(`/tasks/${id}`, { apiKey }),
 
-  updateTaskStatus: (token, id, status) =>
-    request(`/tasks/${id}/status`, { method: 'PATCH', token, body: { status } }),
+  updateTaskStatus: (apiKey, id, status) =>
+    request(`/tasks/${id}/status`, { method: 'PATCH', apiKey, body: { status } }),
+
+  createTask: (apiKey, payload) =>
+    request('/tasks', { method: 'POST', apiKey, body: payload }),
+
+  updateTask: (apiKey, id, payload) =>
+    request(`/tasks/${id}`, { method: 'PATCH', apiKey, body: payload }),
 
   // Timer
-  startTimer: (token, taskId) =>
-    request(`/tasks/${taskId}/timer/start`, { method: 'POST', token }),
+  startTimer: (apiKey, taskId) =>
+    request(`/tasks/${taskId}/timer/start`, { method: 'POST', apiKey }),
 
-  stopTimer: (token, taskId) =>
-    request(`/tasks/${taskId}/timer/stop`, { method: 'POST', token }),
+  stopTimer: (apiKey, taskId) =>
+    request(`/tasks/${taskId}/timer/stop`, { method: 'POST', apiKey }),
 
-  pauseTimer: (token, taskId) =>
-    request(`/tasks/${taskId}/timer/pause`, { method: 'POST', token }),
+  pauseTimer: (apiKey, taskId) =>
+    request(`/tasks/${taskId}/timer/pause`, { method: 'POST', apiKey }),
 
-  resumeTimer: (token, taskId) =>
-    request(`/tasks/${taskId}/timer/resume`, { method: 'POST', token }),
+  resumeTimer: (apiKey, taskId) =>
+    request(`/tasks/${taskId}/timer/resume`, { method: 'POST', apiKey }),
 
-  getActiveTimer: (token, taskId) =>
-    request(`/tasks/${taskId}/timer/active`, { token }),
+  getActiveTimer: (apiKey, taskId) =>
+    request(`/tasks/${taskId}/timer/active`, { apiKey }),
 
   // Pomodoros
-  listPomodoros: (token) => request('/pomodoros', { token }),
+  listPomodoros: (apiKey) => request('/pomodoros', { apiKey }),
 
-  createPomodoro: (token, payload) =>
-    request('/pomodoros', { method: 'POST', token, body: payload }),
+  createPomodoro: (apiKey, payload) =>
+    request('/pomodoros', { method: 'POST', apiKey, body: payload }),
 
-  pomodoroControl: (token, action, extra = {}) =>
-    request('/control', { method: 'POST', token, body: { action, ...extra } }),
+  pomodoroControl: (apiKey, action, extra = {}) =>
+    request('/control', { method: 'POST', apiKey, body: { action, ...extra } }),
 };

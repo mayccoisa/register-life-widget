@@ -120,6 +120,24 @@ async function withToken(handler) {
   return handler(token);
 }
 
+async function withApiKey(handler) {
+  // Exige sessão válida (login JWT) E api key configurada
+  const token = await auth.getValidToken();
+  if (!token) {
+    const err = new Error('NOT_AUTHENTICATED');
+    err.code = 'NOT_AUTHENTICATED';
+    throw err;
+  }
+  const apiKey = await auth.getApiKey();
+  if (!apiKey) {
+    const err = new Error('API key não configurada');
+    err.code = 'NO_API_KEY';
+    err.status = 412;
+    throw err;
+  }
+  return handler(apiKey);
+}
+
 function safe(fn) {
   return async (...args) => {
     try {
@@ -156,12 +174,17 @@ ipcMain.handle('auth:status', safe(async () => {
   const token = await auth.getValidToken();
   if (!token) return { authenticated: false };
   const session = await auth.loadSession();
-  return { authenticated: true, user: session?.user || null };
+  return {
+    authenticated: true,
+    user: session?.user || null,
+    hasApiKey: !!(session?.api_key),
+  };
 }));
 
 ipcMain.handle('auth:login', safe(async (_e, { email, password }) => {
   const result = await auth.login(email, password);
-  return { user: result.user || null };
+  const session = await auth.loadSession();
+  return { user: result.user || null, hasApiKey: !!(session?.api_key) };
 }));
 
 ipcMain.handle('auth:logout', safe(async () => {
@@ -169,24 +192,40 @@ ipcMain.handle('auth:logout', safe(async () => {
   return true;
 }));
 
-ipcMain.handle('tasks:list', safe(async () => withToken((t) => api.listTasks(t))));
-ipcMain.handle('tasks:get', safe(async (_e, id) => withToken((t) => api.getTask(t, id))));
+ipcMain.handle('auth:getApiKey', safe(async () => {
+  const key = await auth.getApiKey();
+  return { hasApiKey: !!key, apiKey: key || null };
+}));
+
+ipcMain.handle('auth:setApiKey', safe(async (_e, { apiKey }) => {
+  await auth.saveApiKey(apiKey || null);
+  return true;
+}));
+
+ipcMain.handle('tasks:list', safe(async () => withApiKey((k) => api.listTasks(k))));
+ipcMain.handle('tasks:get', safe(async (_e, id) => withApiKey((k) => api.getTask(k, id))));
 ipcMain.handle('tasks:setStatus', safe(async (_e, { id, status }) =>
-  withToken((t) => api.updateTaskStatus(t, id, status))
+  withApiKey((k) => api.updateTaskStatus(k, id, status))
+));
+ipcMain.handle('tasks:create', safe(async (_e, payload) =>
+  withApiKey((k) => api.createTask(k, payload))
+));
+ipcMain.handle('tasks:update', safe(async (_e, { id, payload }) =>
+  withApiKey((k) => api.updateTask(k, id, payload))
 ));
 
-ipcMain.handle('timer:start', safe(async (_e, { id }) => withToken((t) => api.startTimer(t, id))));
-ipcMain.handle('timer:stop', safe(async (_e, { id }) => withToken((t) => api.stopTimer(t, id))));
-ipcMain.handle('timer:pause', safe(async (_e, { id }) => withToken((t) => api.pauseTimer(t, id))));
-ipcMain.handle('timer:resume', safe(async (_e, { id }) => withToken((t) => api.resumeTimer(t, id))));
-ipcMain.handle('timer:active', safe(async (_e, { id }) => withToken((t) => api.getActiveTimer(t, id))));
+ipcMain.handle('timer:start', safe(async (_e, { id }) => withApiKey((k) => api.startTimer(k, id))));
+ipcMain.handle('timer:stop', safe(async (_e, { id }) => withApiKey((k) => api.stopTimer(k, id))));
+ipcMain.handle('timer:pause', safe(async (_e, { id }) => withApiKey((k) => api.pauseTimer(k, id))));
+ipcMain.handle('timer:resume', safe(async (_e, { id }) => withApiKey((k) => api.resumeTimer(k, id))));
+ipcMain.handle('timer:active', safe(async (_e, { id }) => withApiKey((k) => api.getActiveTimer(k, id))));
 
-ipcMain.handle('pomodoro:list', safe(async () => withToken((t) => api.listPomodoros(t))));
+ipcMain.handle('pomodoro:list', safe(async () => withApiKey((k) => api.listPomodoros(k))));
 ipcMain.handle('pomodoro:create', safe(async (_e, payload) =>
-  withToken((t) => api.createPomodoro(t, payload))
+  withApiKey((k) => api.createPomodoro(k, payload))
 ));
 ipcMain.handle('pomodoro:control', safe(async (_e, { action, extra }) =>
-  withToken((t) => api.pomodoroControl(t, action, extra))
+  withApiKey((k) => api.pomodoroControl(k, action, extra))
 ));
 
 // ========== Lifecycle ==========
@@ -194,11 +233,30 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.weon.registerlife.widget');
 }
 
+const startedHidden =
+  process.argv.includes('--hidden') ||
+  (app.getLoginItemSettings && app.getLoginItemSettings().wasOpenedAsHidden);
+
+function ensureAutoLaunch() {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return;
+  if (!app.isPackaged) return; // em dev, não registra auto-start
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      openAsHidden: true,
+      args: ['--hidden'],
+    });
+  } catch (e) {
+    console.warn('[autostart] falha ao configurar:', e);
+  }
+}
+
 app.whenReady().then(() => {
+  ensureAutoLaunch();
   createWindow();
   createTray();
   positionWindowNearTray();
-  mainWindow.show();
+  if (!startedHidden) mainWindow.show();
 
   globalShortcut.register('Control+Shift+T', () => {
     toggleWindow();

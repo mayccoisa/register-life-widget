@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const screens = {
   loading: $('screen-loading'),
   login: $('screen-login'),
+  apikey: $('screen-apikey'),
   workspaces: $('screen-workspaces'),
   tasks: $('screen-tasks'),
   details: $('screen-details'),
@@ -29,9 +30,7 @@ const state = {
 
   // Sort / filter
   sortBy: 'default',
-  filterType: null,
   filterCategoryId: null,
-  taskTypes: [],
   taskCategories: [],    // [{ id, name, color }]
 
   // Pomodoro
@@ -107,9 +106,10 @@ function showScreen(name) {
   Object.values(screens).forEach((s) => s.classList.remove('active'));
   if (screens[name]) screens[name].classList.add('active');
 
-  const isLogged = ['workspaces', 'tasks', 'details', 'pomodoro'].includes(name);
+  const isLogged = ['workspaces', 'tasks', 'details', 'pomodoro', 'apikey'].includes(name);
   $('btn-logout').hidden = !isLogged;
-  $('btn-pomodoro').hidden = !isLogged;
+  $('btn-pomodoro').hidden = !['workspaces', 'tasks', 'details', 'pomodoro'].includes(name);
+  $('btn-apikey').hidden = !isLogged;
   $('btn-refresh').hidden = !['workspaces', 'tasks', 'pomodoro'].includes(name);
   $('btn-back').hidden = !['tasks', 'details', 'pomodoro'].includes(name);
 
@@ -119,6 +119,7 @@ function showScreen(name) {
     $('title').textContent = ws ? ws.name : 'Todas as tarefas';
   } else if (name === 'details') $('title').textContent = 'Detalhes';
   else if (name === 'pomodoro') $('title').textContent = 'Pomodoro';
+  else if (name === 'apikey') $('title').textContent = 'API Key';
   else $('title').textContent = 'Register Life';
 }
 
@@ -164,6 +165,10 @@ function handleApiError(res, fallback = 'Erro', bannerId = 'error-banner') {
   if (!res || res.ok) return false;
   if (res.error?.code === 'NOT_AUTHENTICATED' || res.error?.status === 401) {
     showScreen('login');
+    return true;
+  }
+  if (res.error?.code === 'NO_API_KEY') {
+    openApiKeyScreen({ canSkip: false });
     return true;
   }
   const parts = [fallback];
@@ -282,11 +287,6 @@ async function loadTasks() {
   }
   state.workspaces = [...wsMap.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
-  // Deriva tipos
-  const types = new Set();
-  for (const t of state.allTasks) if (t.type) types.add(t.type);
-  state.taskTypes = [...types].sort();
-
   // Deriva categorias
   const catMap = new Map();
   for (const t of state.allTasks) {
@@ -360,9 +360,17 @@ function renderWorkspaceList() {
   }
 }
 
+function pruneStaleFilters() {
+  if (state.filterCategoryId && !visibleCategories().some((c) => c.id === state.filterCategoryId)) {
+    state.filterCategoryId = null;
+  }
+  persistPrefs();
+}
+
 function openWorkspace(workspaceId) {
   state.selectedWorkspaceId = workspaceId;
   persistLastWorkspace(workspaceId);
+  pruneStaleFilters();
   showScreen('tasks');
   renderTaskList();
 }
@@ -400,9 +408,6 @@ function getFilteredTasks() {
 
   if (state.selectedWorkspaceId) {
     list = list.filter((t) => (t.workspace?.id || '__none__') === state.selectedWorkspaceId);
-  }
-  if (state.filterType) {
-    list = list.filter((t) => t.type === state.filterType);
   }
   if (state.filterCategoryId) {
     list = list.filter((t) => {
@@ -461,22 +466,9 @@ const SORT_LABELS = {
   time_desc: 'Mais tempo',
 };
 
-const TYPE_LABELS = {
-  work: 'Trabalho',
-  studies: 'Estudos',
-  household: 'Casa',
-  personal: 'Pessoal',
-  health: 'Saúde',
-};
-
-function typeLabel(t) {
-  return TYPE_LABELS[t] || (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
-}
-
 function persistPrefs() {
   try {
     localStorage.setItem('rl-sort', state.sortBy);
-    localStorage.setItem('rl-filter-type', state.filterType || '');
     localStorage.setItem('rl-filter-category', state.filterCategoryId || '');
   } catch {}
 }
@@ -484,7 +476,6 @@ function persistPrefs() {
 function loadPrefs() {
   try {
     state.sortBy = localStorage.getItem('rl-sort') || 'default';
-    state.filterType = localStorage.getItem('rl-filter-type') || null;
     state.filterCategoryId = localStorage.getItem('rl-filter-category') || null;
   } catch {}
 }
@@ -511,42 +502,37 @@ function categoryName(id) {
 
 function updateToolbarLabels() {
   $('sort-label').textContent = state.sortBy === 'default' ? 'Ordem' : (SORT_LABELS[state.sortBy] || 'Ordem');
-  $('filter-type-label').textContent = state.filterType ? typeLabel(state.filterType) : 'Tipo';
   $('filter-category-label').textContent = state.filterCategoryId ? (categoryName(state.filterCategoryId) || 'Categoria') : 'Categoria';
   $('btn-sort').classList.toggle('active', state.sortBy !== 'default');
-  $('btn-filter-type').classList.toggle('active', !!state.filterType);
   $('btn-filter-category').classList.toggle('active', !!state.filterCategoryId);
 }
 
-function buildFilterTypeMenu() {
-  const menu = $('filter-type-menu');
-  const items = [
-    `<button data-type="" class="${state.filterType ? '' : 'active'}">Todos os tipos</button>`,
-    ...state.taskTypes.map((t) =>
-      `<button data-type="${escapeHtml(t)}" class="${state.filterType === t ? 'active' : ''}">${escapeHtml(typeLabel(t))}</button>`
-    ),
-  ];
-  menu.innerHTML = items.join('');
-  menu.querySelectorAll('button').forEach((b) => {
-    b.addEventListener('click', () => {
-      state.filterType = b.dataset.type || null;
-      persistPrefs();
-      menu.hidden = true;
-      updateToolbarLabels();
-      renderTaskList();
-    });
-  });
+function tasksInCurrentWorkspace() {
+  if (!state.selectedWorkspaceId) return state.allTasks;
+  return state.allTasks.filter((t) => (t.workspace?.id || '__none__') === state.selectedWorkspaceId);
+}
+
+function visibleCategories() {
+  const map = new Map();
+  for (const t of tasksInCurrentWorkspace()) {
+    const c = t.category;
+    if (!c) continue;
+    const id = c.id || c.name || JSON.stringify(c);
+    if (!map.has(id)) map.set(id, { id, name: c.name || String(c), color: c.color || null });
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
 
 function buildFilterCategoryMenu() {
   const menu = $('filter-category-menu');
+  const cats = visibleCategories();
   const items = [
     `<button data-cat="" class="${state.filterCategoryId ? '' : 'active'}">Todas as categorias</button>`,
-    ...state.taskCategories.map((c) =>
+    ...cats.map((c) =>
       `<button data-cat="${escapeHtml(c.id)}" class="${state.filterCategoryId === c.id ? 'active' : ''}">${escapeHtml(c.name)}</button>`
     ),
   ];
-  menu.innerHTML = items.length === 1
+  menu.innerHTML = cats.length === 0
     ? `<button data-cat="" class="active">Sem categorias</button>`
     : items.join('');
   menu.querySelectorAll('button').forEach((b) => {
@@ -575,10 +561,50 @@ function buildSortMenuHandlers() {
   });
 }
 
+const STATUS_GROUPS = [
+  { key: 'in_progress', label: 'Fazendo' },
+  { key: 'paused',      label: 'Pausadas' },
+  { key: 'todo',        label: 'A fazer' },
+];
+
+function buildTaskItem(task) {
+  const li = document.createElement('li');
+  li.className = `task-item status-${task.status}`;
+  if (task.id === state.activeTaskId) li.classList.add('active');
+
+  const totalSec = task.id === state.activeTaskId ? elapsedSeconds() : (task.total_time_seconds || 0);
+  const metaParts = [];
+  if (totalSec > 0 || task.id === state.activeTaskId) metaParts.push(`⏱ ${escapeHtml(formatHMS(totalSec))}`);
+  if (task.due_date) metaParts.push(`📅 ${escapeHtml(formatDate(task.due_date))}`);
+  if (task.category?.name) metaParts.push(escapeHtml(task.category.name));
+
+  const isActive = task.id === state.activeTaskId;
+  const playIcon = isActive ? (state.isPaused ? '▶' : '⏸') : '▶';
+  const playTitle = isActive ? (state.isPaused ? 'Retomar' : 'Pausar') : 'Iniciar';
+
+  li.innerHTML = `
+    <div class="task-bar"></div>
+    <div class="task-info">
+      <div class="task-title">${escapeHtml(task.title || '(sem título)')}</div>
+      ${metaParts.length ? `<div class="task-meta">${metaParts.join('<span class="dot">·</span>')}</div>` : ''}
+    </div>
+    <div class="task-actions">
+      <button data-action="play" title="${playTitle}" class="${isActive && !state.isPaused ? 'active' : ''}">${playIcon}</button>
+    </div>
+  `;
+
+  li.querySelector('.task-info').addEventListener('click', () => openDetails(task));
+  li.querySelector('[data-action="play"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isActive) onPauseResumeClick();
+    else onPlayClick(task);
+  });
+  return li;
+}
+
 function renderTaskList() {
   updateToolbarLabels();
   buildSortMenuHandlers();
-  buildFilterTypeMenu();
   buildFilterCategoryMenu();
 
   const list = $('task-list');
@@ -593,35 +619,20 @@ function renderTaskList() {
     return;
   }
 
-  for (const task of tasks) {
-    const li = document.createElement('li');
-    li.className = 'task-item';
-    if (task.id === state.activeTaskId) li.classList.add('active');
+  const byStatus = new Map(STATUS_GROUPS.map((g) => [g.key, []]));
+  for (const t of tasks) {
+    const key = byStatus.has(t.status) ? t.status : 'todo';
+    byStatus.get(key).push(t);
+  }
 
-    const totalSec = task.id === state.activeTaskId ? elapsedSeconds() : (task.total_time_seconds || 0);
-    const dueDate = task.due_date ? ` · 📅 ${escapeHtml(formatDate(task.due_date))}` : '';
-    const typeStr = task.type ? ` · ${escapeHtml(typeLabel(task.type))}` : '';
-    const catStr = task.category?.name ? ` · ${escapeHtml(task.category.name)}` : '';
-
-    li.innerHTML = `
-      <div class="task-info">
-        <div class="task-title">${escapeHtml(task.title || '(sem título)')}</div>
-        <div class="task-meta">
-          <span class="task-status ${task.status}">${labelStatus(task.status)}</span>
-          ${formatHMS(totalSec)}${dueDate}${typeStr}${catStr}
-        </div>
-      </div>
-      <div class="task-actions">
-        <button data-action="play" title="Iniciar/retomar">▶</button>
-      </div>
-    `;
-
-    li.querySelector('.task-info').addEventListener('click', () => openDetails(task));
-    li.querySelector('[data-action="play"]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      onPlayClick(task);
-    });
-    list.appendChild(li);
+  for (const group of STATUS_GROUPS) {
+    const items = byStatus.get(group.key);
+    if (!items.length) continue;
+    const header = document.createElement('li');
+    header.className = `task-group-header group-${group.key}`;
+    header.innerHTML = `<span class="group-label">${escapeHtml(group.label)}</span><span class="group-count">${items.length}</span>`;
+    list.appendChild(header);
+    for (const task of items) list.appendChild(buildTaskItem(task));
   }
 }
 
@@ -645,26 +656,34 @@ async function openDetails(task) {
   }
 }
 
+function toDateInput(d) {
+  if (!d) return '';
+  try {
+    const dt = new Date(d);
+    if (isNaN(dt)) return '';
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch { return ''; }
+}
+
 function renderDetails(task) {
   const body = $('details-body');
   const totalSec = task.id === state.activeTaskId ? elapsedSeconds() : (task.total_time_seconds || 0);
 
-  const rows = [];
+  // Bloco somente-leitura: workspace + dados não editáveis
+  const infoRows = [];
   const addRow = (key, val) => {
     if (val === null || val === undefined || val === '') return;
-    rows.push(`<div class="detail-row"><div class="detail-key">${escapeHtml(key)}</div><div class="detail-val">${val}</div></div>`);
+    infoRows.push(`<div class="detail-row"><div class="detail-key">${escapeHtml(key)}</div><div class="detail-val">${val}</div></div>`);
   };
-
-  addRow('Status', `<span class="task-status ${task.status}">${labelStatus(task.status)}</span>`);
   addRow('Tempo', escapeHtml(formatHMS(totalSec)));
   if (task.workspace) {
     const c = task.workspace.color || '#666';
     addRow('Workspace', `<span class="chip colored" style="background:${escapeHtml(c)}">${escapeHtml(task.workspace.name)}</span>`);
   }
-  addRow('Tipo', escapeHtml(task.type));
-  addRow('Vencimento', escapeHtml(formatDate(task.due_date)));
   if (task.stage) addRow('Etapa', escapeHtml(task.stage.name || task.stage));
-  if (task.category) addRow('Categoria', escapeHtml(task.category.name || task.category));
   if (Array.isArray(task.projects) && task.projects.length) {
     const chips = task.projects.map((p) => `<span class="chip">${escapeHtml(p.name || p)}</span>`).join('');
     addRow('Projetos', chips);
@@ -673,17 +692,11 @@ function renderDetails(task) {
     const chips = task.tags.map((t) => `<span class="chip">${escapeHtml(t.name || t)}</span>`).join('');
     addRow('Tags', chips);
   }
-  addRow('Prioridade', escapeHtml(task.priority));
   addRow('Criada em', escapeHtml(formatDate(task.created_at)));
 
-  const desc = task.description || task.notes || '';
+  body.innerHTML = `<div>${infoRows.join('')}</div>`;
 
-  body.innerHTML = `
-    <div class="detail-title">${escapeHtml(task.title || '(sem título)')}</div>
-    ${desc ? `<div class="detail-description">${escapeHtml(desc)}</div>` : ''}
-    <div>${rows.join('')}</div>
-  `;
-
+  // Botão grande de timer
   const btn = $('btn-start-task');
   if (task.id === state.activeTaskId) {
     btn.textContent = state.isPaused ? '▶ Retomar' : '⏸ Pausar';
@@ -696,6 +709,89 @@ function renderDetails(task) {
       setTimeout(() => renderDetails(task), 100);
     } else {
       onPlayClick(task).then(() => renderDetails(task));
+    }
+  };
+
+  // Formulário de edição
+  const fields = {
+    title:    $('edit-title'),
+    status:   $('edit-status'),
+    priority: $('edit-priority'),
+    category: $('edit-category'),
+    due:      $('edit-due-date'),
+    dueTime:  $('edit-due-time'),
+    notes:    $('edit-notes'),
+  };
+  const saveBtn = $('btn-save-details');
+
+  const original = {
+    title:       task.title || '',
+    status:      task.status || 'todo',
+    priority:    task.priority || '',
+    category_id: task.category?.id || '',
+    due_date:    toDateInput(task.due_date),
+    due_time:    task.due_time || '',
+    description: task.description || task.notes || '',
+  };
+
+  populateCategorySelect(fields.category, original.category_id, task.workspace?.id || null);
+
+  fields.title.value    = original.title;
+  fields.status.value   = original.status;
+  fields.priority.value = original.priority;
+  fields.due.value      = original.due_date;
+  fields.dueTime.value  = original.due_time;
+  fields.notes.value    = original.description;
+  saveBtn.disabled = true;
+
+  const current = () => ({
+    title:       fields.title.value.trim(),
+    status:      fields.status.value,
+    priority:    fields.priority.value,
+    category_id: fields.category.value,
+    due_date:    fields.due.value,
+    due_time:    fields.dueTime.value,
+    description: fields.notes.value,
+  });
+
+  const refreshDirty = () => {
+    const c = current();
+    const dirty = Object.keys(original).some((k) => c[k] !== original[k]);
+    saveBtn.disabled = !dirty || !c.title;
+  };
+  Object.values(fields).forEach((el) => { el.oninput = refreshDirty; el.onchange = refreshDirty; });
+
+  saveBtn.onclick = async () => {
+    const c = current();
+    if (!c.title) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Salvando…';
+    try {
+      // PATCH /tasks/:id aceita todos os campos editáveis (inclusive status),
+      // então mandamos tudo numa request só. category_id é envio "best-effort":
+      // a doc oficial não lista categoria como editável.
+      const patch = {};
+      if (c.title !== original.title) patch.title = c.title;
+      if (c.priority !== original.priority) patch.priority = c.priority || null;
+      if (c.category_id !== original.category_id) patch.category_id = c.category_id || null;
+      if (c.due_date !== original.due_date) patch.due_date = c.due_date || null;
+      if (c.due_time !== original.due_time) patch.due_time = c.due_time || null;
+      if (c.description !== original.description) patch.description = c.description;
+      if (c.status !== original.status) patch.status = c.status;
+
+      if (Object.keys(patch).length) {
+        const r = await window.widget.tasks.update(task.id, patch);
+        if (handleApiError(r, 'Falha ao salvar', 'error-banner-details')) {
+          saveBtn.textContent = 'Salvar alterações';
+          saveBtn.disabled = false;
+          return;
+        }
+      }
+      await loadTasks();
+      const updated = state.allTasks.find((t) => t.id === task.id) || { ...task, ...c };
+      renderDetails(updated);
+    } finally {
+      saveBtn.textContent = 'Salvar alterações';
     }
   };
 }
@@ -971,6 +1067,71 @@ $('login-form').addEventListener('submit', async (e) => {
   }
 
   $('login-password').value = '';
+
+  if (!res.data?.hasApiKey) {
+    openApiKeyScreen({ canSkip: false });
+    return;
+  }
+  await loadTasks();
+  resumeOrShowWorkspaces();
+});
+
+function openApiKeyScreen({ canSkip = true } = {}) {
+  $('apikey-input').value = '';
+  $('apikey-error').hidden = true;
+  $('apikey-error').textContent = '';
+  $('apikey-skip').hidden = !canSkip;
+  showScreen('apikey');
+  setTimeout(() => $('apikey-input').focus(), 50);
+}
+
+$('btn-apikey').addEventListener('click', () => openApiKeyScreen({ canSkip: true }));
+
+$('apikey-skip').addEventListener('click', () => {
+  if (state.allTasks.length || state.workspaces.length) {
+    showScreen('workspaces');
+    renderWorkspaceList();
+  } else {
+    showScreen('workspaces');
+    renderWorkspaceList();
+  }
+});
+
+$('apikey-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const key = $('apikey-input').value.trim();
+  const errEl = $('apikey-error');
+  const btn = $('apikey-submit');
+  errEl.hidden = true;
+
+  if (!key) {
+    errEl.textContent = 'Cole a chave para continuar.';
+    errEl.hidden = false;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+  const save = await window.widget.auth.setApiKey(key);
+  if (!save.ok) {
+    btn.disabled = false;
+    btn.textContent = 'Salvar';
+    errEl.textContent = save.error?.message || 'Falha ao salvar a chave';
+    errEl.hidden = false;
+    return;
+  }
+
+  // Valida testando uma chamada simples
+  const test = await window.widget.tasks.list();
+  btn.disabled = false;
+  btn.textContent = 'Salvar';
+
+  if (!test.ok) {
+    errEl.textContent = `Chave inválida — ${test.error?.message || 'erro ao validar'}`;
+    errEl.hidden = false;
+    return;
+  }
+
   await loadTasks();
   resumeOrShowWorkspaces();
 });
@@ -978,7 +1139,7 @@ $('login-form').addEventListener('submit', async (e) => {
 $('btn-theme').addEventListener('click', toggleTheme);
 
 // Toolbar de tarefas: dropdowns
-const ALL_DROPDOWNS = ['sort-menu', 'filter-type-menu', 'filter-category-menu'];
+const ALL_DROPDOWNS = ['sort-menu', 'filter-category-menu'];
 function openDropdown(menuId) {
   ALL_DROPDOWNS.forEach((id) => { $(id).hidden = id !== menuId; });
 }
@@ -991,7 +1152,6 @@ function toggleDropdown(menuId) {
   if (wasHidden) openDropdown(menuId);
 }
 $('btn-sort').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdown('sort-menu'); });
-$('btn-filter-type').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdown('filter-type-menu'); });
 $('btn-filter-category').addEventListener('click', (e) => { e.stopPropagation(); toggleDropdown('filter-category-menu'); });
 document.addEventListener('click', closeAllDropdowns);
 ALL_DROPDOWNS.forEach((id) => $(id).addEventListener('click', (e) => e.stopPropagation()));
@@ -1040,6 +1200,118 @@ $('pomo-break-min').addEventListener('change', pomoConfig);
 
 window.widget.onGlobalToggleTimer(() => {
   if (state.activeTaskId) onPauseResumeClick();
+});
+
+// ============================================================
+// Nova tarefa (modal)
+// ============================================================
+function categoriesForWorkspace(wsId) {
+  const map = new Map();
+  for (const t of state.allTasks) {
+    const taskWsId = t.workspace?.id || '__none__';
+    if (wsId && taskWsId !== wsId) continue;
+    const c = t.category;
+    if (!c) continue;
+    const id = c.id || c.name || JSON.stringify(c);
+    if (!map.has(id)) map.set(id, { id, name: c.name || String(c), color: c.color || null });
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+function populateCategorySelect(sel, currentId, wsId) {
+  const cats = wsId ? categoriesForWorkspace(wsId) : state.taskCategories;
+  const opts = ['<option value="">—</option>'];
+  for (const c of cats) {
+    opts.push(`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`);
+  }
+  sel.innerHTML = opts.join('');
+  if (currentId && cats.some((c) => c.id === currentId)) {
+    sel.value = currentId;
+  } else {
+    sel.value = '';
+  }
+}
+
+function openNewTaskModal() {
+  const modal = $('new-task-modal');
+  const wsSel = $('nt-workspace');
+  // Popula workspaces (a partir de state.workspaces, exceto o __none__)
+  const opts = ['<option value="">—</option>'];
+  for (const ws of state.workspaces) {
+    if (ws.id === '__none__') continue;
+    opts.push(`<option value="${escapeHtml(ws.id)}">${escapeHtml(ws.name)}</option>`);
+  }
+  wsSel.innerHTML = opts.join('');
+  if (state.selectedWorkspaceId && state.selectedWorkspaceId !== '__none__') {
+    wsSel.value = state.selectedWorkspaceId;
+  }
+
+  const catSel = $('nt-category');
+  const repopulateCats = () => populateCategorySelect(catSel, catSel.value, wsSel.value || null);
+  populateCategorySelect(catSel, state.filterCategoryId || '', wsSel.value || null);
+  wsSel.onchange = repopulateCats;
+
+  $('nt-title').value = '';
+  $('nt-priority').value = '';
+  $('nt-due-date').value = '';
+  $('nt-description').value = '';
+  $('nt-error').hidden = true;
+  $('nt-error').textContent = '';
+  modal.hidden = false;
+  setTimeout(() => $('nt-title').focus(), 50);
+}
+
+function closeNewTaskModal() {
+  $('new-task-modal').hidden = true;
+}
+
+$('btn-new-task').addEventListener('click', openNewTaskModal);
+$('new-task-close').addEventListener('click', closeNewTaskModal);
+$('nt-cancel').addEventListener('click', closeNewTaskModal);
+$('new-task-modal').addEventListener('click', (e) => {
+  if (e.target === $('new-task-modal')) closeNewTaskModal();
+});
+
+$('new-task-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = $('nt-error');
+  const submit = $('nt-submit');
+  errEl.hidden = true;
+
+  const title = $('nt-title').value.trim();
+  if (!title) {
+    errEl.textContent = 'Título é obrigatório';
+    errEl.hidden = false;
+    return;
+  }
+  const payload = { title, status: 'todo' };
+  const ws = $('nt-workspace').value;
+  if (ws) payload.workspace_id = ws;
+  const cat = $('nt-category').value;
+  if (cat) payload.category_id = cat;
+  const priority = $('nt-priority').value;
+  if (priority) payload.priority = priority;
+  const due = $('nt-due-date').value;
+  if (due) payload.due_date = due;
+  const desc = $('nt-description').value.trim();
+  if (desc) payload.description = desc;
+
+  submit.disabled = true;
+  submit.textContent = 'Criando…';
+  const res = await window.widget.tasks.create(payload);
+  submit.disabled = false;
+  submit.textContent = 'Criar';
+
+  if (!res.ok) {
+    errEl.textContent = res.error?.message || 'Falha ao criar tarefa';
+    errEl.hidden = false;
+    return;
+  }
+
+  closeNewTaskModal();
+  await loadTasks();
+  if (currentScreen === 'tasks') renderTaskList();
+  else if (currentScreen === 'workspaces') renderWorkspaceList();
 });
 
 // ============================================================
@@ -1092,6 +1364,10 @@ window.widget.updater.onStatus((s) => {
   refreshTray();
   const res = await window.widget.auth.status();
   if (res.ok && res.data?.authenticated) {
+    if (!res.data.hasApiKey) {
+      openApiKeyScreen({ canSkip: false });
+      return;
+    }
     await loadTasks();
     resumeOrShowWorkspaces();
   } else {

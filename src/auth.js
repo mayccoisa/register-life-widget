@@ -8,6 +8,12 @@ const { app, safeStorage } = require('electron');
 const api = require('./api');
 
 const FILE_NAME = 'session.bin';
+const VALIDATION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
+
+function isValidationExpired(validated_at) {
+  if (!validated_at) return true;
+  return (Date.now() - validated_at) >= VALIDATION_MAX_AGE_MS;
+}
 
 function filePath() {
   return path.join(app.getPath('userData'), FILE_NAME);
@@ -58,6 +64,10 @@ function isExpired(expires_at) {
 async function getValidToken() {
   const session = await loadSession();
   if (!session) return null;
+  if (isValidationExpired(session.validated_at)) {
+    await clearSession();
+    return null;
+  }
   if (!isExpired(session.expires_at)) return session.token;
   if (!session.refresh_token) return session.token;
   try {
@@ -72,8 +82,25 @@ async function getValidToken() {
 
 async function login(email, password) {
   const result = await api.login(email, password);
-  await saveSession(result);
+  // Preserva api_key existente se já estava salva (re-login não deve apagar a chave)
+  const existing = await loadSession();
+  await saveSession({
+    ...result,
+    api_key: existing?.api_key || null,
+    validated_at: Date.now(),
+  });
   return result;
+}
+
+async function saveApiKey(apiKey) {
+  const session = (await loadSession()) || {};
+  session.api_key = apiKey || null;
+  await saveSession(session);
+}
+
+async function getApiKey() {
+  const session = await loadSession();
+  return session?.api_key || null;
 }
 
 async function logout() {
@@ -84,4 +111,4 @@ async function logout() {
   await clearSession();
 }
 
-module.exports = { login, logout, loadSession, getValidToken, saveSession, clearSession };
+module.exports = { login, logout, loadSession, getValidToken, saveSession, clearSession, saveApiKey, getApiKey };

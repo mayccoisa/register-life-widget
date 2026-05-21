@@ -1,6 +1,6 @@
 {
   "name": "register-life-widget",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Widget desktop do Register Life — timer de tarefas e pomodoro",
   "main": "src/main.js",
   "scripts": {

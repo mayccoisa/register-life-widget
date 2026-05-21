@@ -13,6 +13,7 @@
     <div class="actions">
       <button id="btn-theme" title="Alternar tema claro/escuro">🌙</button>
       <button id="btn-pomodoro" title="Pomodoro" hidden>🍅</button>
+      <button id="btn-apikey" title="API Key" hidden>🔑</button>
       <button id="btn-refresh" title="Atualizar" hidden>↻</button>
       <button id="btn-logout" title="Sair da conta" hidden>⎋</button>
       <button id="btn-hide" title="Ocultar (Ctrl+Shift+T)">—</button>
@@ -64,6 +65,23 @@
       </form>
     </section>
 
+    <!-- API Key -->
+    <section id="screen-apikey" class="screen">
+      <form id="apikey-form" class="login-form">
+        <h2>API Key</h2>
+        <p class="muted">Cole a chave gerada no seu painel do Register Life. Ela é salva criptografada apenas neste dispositivo.</p>
+        <label>
+          <span>Chave</span>
+          <input type="text" id="apikey-input" autocomplete="off" spellcheck="false" placeholder="rl_..." required />
+        </label>
+        <div class="modal-actions" style="justify-content: space-between;">
+          <button type="button" id="apikey-skip" class="btn-ghost" hidden>Voltar</button>
+          <button type="submit" id="apikey-submit" class="btn-primary">Salvar</button>
+        </div>
+        <p id="apikey-error" class="error" hidden></p>
+      </form>
+    </section>
+
     <!-- Workspaces -->
     <section id="screen-workspaces" class="screen">
       <div id="error-banner-ws" class="error-banner" hidden></div>
@@ -77,9 +95,6 @@
       <div class="task-toolbar">
         <button id="btn-sort" class="toolbar-btn" title="Ordenar">
           <span class="tb-icon">⇅</span><span id="sort-label">Ordem</span>
-        </button>
-        <button id="btn-filter-type" class="toolbar-btn" title="Filtrar por tipo">
-          <span class="tb-icon">▤</span><span id="filter-type-label">Tipo</span>
         </button>
         <button id="btn-filter-category" class="toolbar-btn" title="Filtrar por categoria">
           <span class="tb-icon">◉</span><span id="filter-category-label">Categoria</span>
@@ -95,15 +110,108 @@
         <button data-sort="title_desc">Título Z→A</button>
         <button data-sort="time_desc">Mais tempo gasto</button>
       </div>
-      <div id="filter-type-menu" class="dropdown-menu" hidden></div>
       <div id="filter-category-menu" class="dropdown-menu" hidden></div>
 
       <ul id="task-list" class="task-list"></ul>
+
+      <button id="btn-new-task" class="fab" title="Nova tarefa">+</button>
     </section>
+
+    <!-- Modal: Nova tarefa -->
+    <div id="new-task-modal" class="modal-backdrop" hidden>
+      <form id="new-task-form" class="modal-card">
+        <div class="modal-header">
+          <h3>Nova tarefa</h3>
+          <button type="button" id="new-task-close" class="btn-ghost" title="Fechar">×</button>
+        </div>
+        <label>
+          <span>Título *</span>
+          <input type="text" id="nt-title" required maxlength="200" />
+        </label>
+        <label>
+          <span>Workspace</span>
+          <select id="nt-workspace"></select>
+        </label>
+        <label>
+          <span>Categoria</span>
+          <select id="nt-category"></select>
+        </label>
+        <label>
+          <span>Prioridade</span>
+          <select id="nt-priority">
+            <option value="">—</option>
+            <option value="low">Baixa</option>
+            <option value="medium">Média</option>
+            <option value="high">Alta</option>
+          </select>
+        </label>
+        <label>
+          <span>Vencimento</span>
+          <input type="date" id="nt-due-date" />
+        </label>
+        <label>
+          <span>Descrição</span>
+          <textarea id="nt-description" rows="3" maxlength="2000"></textarea>
+        </label>
+        <p id="nt-error" class="error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" id="nt-cancel" class="btn-ghost">Cancelar</button>
+          <button type="submit" id="nt-submit" class="btn-primary">Criar</button>
+        </div>
+      </form>
+    </div>
 
     <!-- Task Details -->
     <section id="screen-details" class="screen">
+      <div id="error-banner-details" class="error-banner" hidden></div>
       <div class="details-body" id="details-body"></div>
+
+      <div class="details-edit">
+        <label>
+          <span>Título</span>
+          <input type="text" id="edit-title" maxlength="200" />
+        </label>
+        <div class="edit-row">
+          <label>
+            <span>Status</span>
+            <select id="edit-status">
+              <option value="todo">A fazer</option>
+              <option value="in_progress">Fazendo</option>
+              <option value="paused">Pausada</option>
+              <option value="done">Feita</option>
+            </select>
+          </label>
+          <label>
+            <span>Prioridade</span>
+            <select id="edit-priority">
+              <option value="">—</option>
+              <option value="low">Baixa</option>
+              <option value="medium">Média</option>
+              <option value="high">Alta</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>Categoria</span>
+          <select id="edit-category"></select>
+        </label>
+        <div class="edit-row">
+          <label>
+            <span>Vencimento</span>
+            <input type="date" id="edit-due-date" />
+          </label>
+          <label>
+            <span>Horário</span>
+            <input type="time" id="edit-due-time" />
+          </label>
+        </div>
+        <label>
+          <span>Descrição</span>
+          <textarea id="edit-notes" rows="3" maxlength="2000" placeholder="Adicione uma observação…"></textarea>
+        </label>
+        <button id="btn-save-details" class="btn-primary" disabled>Salvar alterações</button>
+      </div>
+
       <div class="details-actions">
         <button id="btn-start-task" class="btn-primary">▶ Iniciar timer</button>
       </div>

@@ -13,12 +13,16 @@ contextBridge.exposeInMainWorld('widget', {
     status: () => invoke('auth:status'),
     login: (email, password) => invoke('auth:login', { email, password }),
     logout: () => invoke('auth:logout'),
+    getApiKey: () => invoke('auth:getApiKey'),
+    setApiKey: (apiKey) => invoke('auth:setApiKey', { apiKey }),
   },
 
   tasks: {
     list: () => invoke('tasks:list'),
     get: (id) => invoke('tasks:get', id),
     setStatus: (id, status) => invoke('tasks:setStatus', { id, status }),
+    create: (payload) => invoke('tasks:create', payload),
+    update: (id, payload) => invoke('tasks:update', { id, payload }),
   },
 
   timer: {
