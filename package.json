@@ -1,6 +1,6 @@
 {
   "name": "register-life-widget",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Widget desktop do Register Life — timer de tarefas e pomodoro",
   "main": "src/main.js",
   "scripts": {
@@ -8,12 +8,15 @@
     "build:icons": "node scripts/build-icons.js",
     "build": "npm run build:icons && electron-builder",
     "build:win": "npm run build:icons && electron-builder --win",
-    "publish:win": "npm run build:icons && electron-builder --win --publish always"
+    "publish:win": "npm run build:icons && electron-builder --win --publish always",
+    "test:e2e": "playwright test",
+    "test:installed": "node scripts/test-installed.js"
   },
   "author": "Maycon",
   "license": "UNLICENSED",
   "private": true,
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8"
   },
@@ -45,7 +48,12 @@
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico",
       "artifactName": "RegisterLifeWidget-Setup-${version}.${ext}"

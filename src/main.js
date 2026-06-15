@@ -1,5 +1,5 @@
 const {
-  app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, Notification,
+  app, BrowserWindow, Tray, Menu, ipcMain, screen, Notification,
 } = require('electron');
 const path = require('path');
 const api = require('./api');
@@ -202,6 +202,14 @@ ipcMain.handle('auth:setApiKey', safe(async (_e, { apiKey }) => {
   return true;
 }));
 
+ipcMain.handle('workspaces:list', safe(async () => withApiKey((k) => api.listWorkspaces(k))));
+ipcMain.handle('workspaces:stages', safe(async (_e, { workspaceId }) =>
+  withApiKey((k) => api.listStages(k, workspaceId))
+));
+ipcMain.handle('workspaces:categories', safe(async (_e, { workspaceId }) =>
+  withApiKey((k) => api.listWorkspaceCategories(k, workspaceId))
+));
+
 ipcMain.handle('tasks:list', safe(async () => withApiKey((k) => api.listTasks(k))));
 ipcMain.handle('tasks:get', safe(async (_e, id) => withApiKey((k) => api.getTask(k, id))));
 ipcMain.handle('tasks:setStatus', safe(async (_e, { id, status }) =>
@@ -212,6 +220,9 @@ ipcMain.handle('tasks:create', safe(async (_e, payload) =>
 ));
 ipcMain.handle('tasks:update', safe(async (_e, { id, payload }) =>
   withApiKey((k) => api.updateTask(k, id, payload))
+));
+ipcMain.handle('tasks:delete', safe(async (_e, id) =>
+  withApiKey((k) => api.deleteTask(k, id))
 ));
 
 ipcMain.handle('timer:start', safe(async (_e, { id }) => withApiKey((k) => api.startTimer(k, id))));
@@ -233,11 +244,15 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.weon.registerlife.widget');
 }
 
+// Modo de teste E2E: evita efeitos colaterais no SO (auto-start, auto-update).
+const isE2E = process.env.RL_E2E === '1';
+
 const startedHidden =
   process.argv.includes('--hidden') ||
   (app.getLoginItemSettings && app.getLoginItemSettings().wasOpenedAsHidden);
 
 function ensureAutoLaunch() {
+  if (isE2E) return;
   if (process.platform !== 'win32' && process.platform !== 'darwin') return;
   if (!app.isPackaged) return; // em dev, não registra auto-start
   try {
@@ -258,16 +273,10 @@ app.whenReady().then(() => {
   positionWindowNearTray();
   if (!startedHidden) mainWindow.show();
 
-  globalShortcut.register('Control+Shift+T', () => {
-    toggleWindow();
-    if (mainWindow) mainWindow.webContents.send('global-shortcut:toggle-timer');
-  });
-
-  // Auto-update — só faz sentido em build empacotado
-  if (app.isPackaged) {
+  // Auto-update — só faz sentido em build empacotado (desligado em testes E2E)
+  if (app.isPackaged && !isE2E) {
     try { updater.setup(mainWindow); } catch (e) { console.warn('[updater] falha ao iniciar:', e); }
   }
 });
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', (e) => e.preventDefault());

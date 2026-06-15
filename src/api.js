@@ -52,6 +52,11 @@ module.exports = {
   logout: (token) =>
     request('/auth/logout', { method: 'POST', token }),
 
+  // Workspaces / stages / categories
+  listWorkspaces: (apiKey) => request('/workspaces', { apiKey }),
+  listStages: (apiKey, workspaceId) => request(`/workspaces/${workspaceId}/stages`, { apiKey }),
+  listWorkspaceCategories: (apiKey, workspaceId) => request(`/workspaces/${workspaceId}/categories`, { apiKey }),
+
   // Tasks — usam X-API-Key
   listTasks: (apiKey) => request('/tasks', { apiKey }),
 
@@ -65,6 +70,9 @@ module.exports = {
 
   updateTask: (apiKey, id, payload) =>
     request(`/tasks/${id}`, { method: 'PATCH', apiKey, body: payload }),
+
+  deleteTask: (apiKey, id) =>
+    request(`/tasks/${id}`, { method: 'DELETE', apiKey }),
 
   // Timer
   startTimer: (apiKey, taskId) =>

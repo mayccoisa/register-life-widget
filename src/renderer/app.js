@@ -19,6 +19,8 @@ const screens = {
 const state = {
   allTasks: [],
   workspaces: [],
+  apiWorkspaces: [],        // [{ id, name, color }] vindo de GET /workspaces
+  stagesByWs: new Map(),    // wsId -> [{ id, name, order_index }]
   selectedWorkspaceId: null,
   selectedTaskId: null,
 
@@ -279,6 +281,10 @@ async function loadTasks() {
   state.allTasks = all.filter((t) => open.has(t.status));
 
   const wsMap = new Map();
+  // Pre-popula com workspaces conhecidos via API (mesmo os sem tarefas abertas)
+  for (const ws of state.apiWorkspaces) {
+    wsMap.set(ws.id, { id: ws.id, name: ws.name, color: ws.color || null, count: 0 });
+  }
   for (const t of state.allTasks) {
     const ws = t.workspace || { id: '__none__', name: 'Sem workspace', color: null };
     const key = ws.id || '__none__';
@@ -313,6 +319,59 @@ async function loadTasks() {
 
   setStatus(`${state.allTasks.length} tarefa(s) · ${state.workspaces.length} workspace(s)`);
   refreshTray();
+}
+
+// ============================================================
+// Workspaces / stages (novos endpoints)
+// ============================================================
+async function loadWorkspaces() {
+  const res = await window.widget.workspaces.list();
+  if (!res.ok) {
+    console.warn('[widget] falha ao carregar workspaces:', res.error);
+    return [];
+  }
+  const d = res.data;
+  const arr = Array.isArray(d) ? d : (d?.data || d?.workspaces || []);
+  state.apiWorkspaces = arr
+    .map((w) => ({ id: w.id, name: w.name, color: w.color || null }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  return state.apiWorkspaces;
+}
+
+async function getStagesFor(workspaceId) {
+  if (!workspaceId) return [];
+  if (state.stagesByWs.has(workspaceId)) return state.stagesByWs.get(workspaceId);
+  const res = await window.widget.workspaces.stages(workspaceId);
+  if (!res.ok) {
+    console.warn('[widget] falha ao carregar stages:', res.error);
+    return [];
+  }
+  const d = res.data;
+  const arr = Array.isArray(d) ? d : (d?.data || d?.stages || []);
+  const stages = arr
+    .map((s) => ({ id: s.id, name: s.name, order_index: s.order_index ?? 0 }))
+    .sort((a, b) => a.order_index - b.order_index);
+  state.stagesByWs.set(workspaceId, stages);
+  return stages;
+}
+
+async function populateStageSelect(sel, workspaceId, currentId) {
+  if (!workspaceId) {
+    sel.innerHTML = '<option value="">— sem workspace —</option>';
+    sel.value = '';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">Carregando…</option>';
+  const stages = await getStagesFor(workspaceId);
+  const opts = ['<option value="">—</option>'];
+  for (const s of stages) {
+    opts.push(`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`);
+  }
+  sel.innerHTML = opts.join('');
+  if (currentId && stages.some((s) => s.id === currentId)) sel.value = currentId;
+  else sel.value = '';
 }
 
 // ============================================================
@@ -679,11 +738,6 @@ function renderDetails(task) {
     infoRows.push(`<div class="detail-row"><div class="detail-key">${escapeHtml(key)}</div><div class="detail-val">${val}</div></div>`);
   };
   addRow('Tempo', escapeHtml(formatHMS(totalSec)));
-  if (task.workspace) {
-    const c = task.workspace.color || '#666';
-    addRow('Workspace', `<span class="chip colored" style="background:${escapeHtml(c)}">${escapeHtml(task.workspace.name)}</span>`);
-  }
-  if (task.stage) addRow('Etapa', escapeHtml(task.stage.name || task.stage));
   if (Array.isArray(task.projects) && task.projects.length) {
     const chips = task.projects.map((p) => `<span class="chip">${escapeHtml(p.name || p)}</span>`).join('');
     addRow('Projetos', chips);
@@ -692,7 +746,6 @@ function renderDetails(task) {
     const chips = task.tags.map((t) => `<span class="chip">${escapeHtml(t.name || t)}</span>`).join('');
     addRow('Tags', chips);
   }
-  addRow('Criada em', escapeHtml(formatDate(task.created_at)));
 
   body.innerHTML = `<div>${infoRows.join('')}</div>`;
 
@@ -717,6 +770,7 @@ function renderDetails(task) {
     title:    $('edit-title'),
     status:   $('edit-status'),
     priority: $('edit-priority'),
+    stage:    $('edit-stage'),
     category: $('edit-category'),
     due:      $('edit-due-date'),
     dueTime:  $('edit-due-time'),
@@ -728,6 +782,7 @@ function renderDetails(task) {
     title:       task.title || '',
     status:      task.status || 'todo',
     priority:    task.priority || '',
+    stage_id:    task.stage?.id || '',
     category_id: task.category?.id || '',
     due_date:    toDateInput(task.due_date),
     due_time:    task.due_time || '',
@@ -735,6 +790,8 @@ function renderDetails(task) {
   };
 
   populateCategorySelect(fields.category, original.category_id, task.workspace?.id || null);
+  populateStageSelect(fields.stage, task.workspace?.id || null, original.stage_id)
+    .then(() => { refreshDirty(); });
 
   fields.title.value    = original.title;
   fields.status.value   = original.status;
@@ -748,6 +805,7 @@ function renderDetails(task) {
     title:       fields.title.value.trim(),
     status:      fields.status.value,
     priority:    fields.priority.value,
+    stage_id:    fields.stage.value,
     category_id: fields.category.value,
     due_date:    fields.due.value,
     due_time:    fields.dueTime.value,
@@ -773,6 +831,7 @@ function renderDetails(task) {
       const patch = {};
       if (c.title !== original.title) patch.title = c.title;
       if (c.priority !== original.priority) patch.priority = c.priority || null;
+      if (c.stage_id !== original.stage_id) patch.stage_id = c.stage_id || null;
       if (c.category_id !== original.category_id) patch.category_id = c.category_id || null;
       if (c.due_date !== original.due_date) patch.due_date = c.due_date || null;
       if (c.due_time !== original.due_time) patch.due_time = c.due_time || null;
@@ -1072,7 +1131,7 @@ $('login-form').addEventListener('submit', async (e) => {
     openApiKeyScreen({ canSkip: false });
     return;
   }
-  await loadTasks();
+  await Promise.all([loadWorkspaces(), loadTasks()]);
   resumeOrShowWorkspaces();
 });
 
@@ -1132,7 +1191,7 @@ $('apikey-form').addEventListener('submit', async (e) => {
     return;
   }
 
-  await loadTasks();
+  await Promise.all([loadWorkspaces(), loadTasks()]);
   resumeOrShowWorkspaces();
 });
 
@@ -1235,21 +1294,29 @@ function populateCategorySelect(sel, currentId, wsId) {
 function openNewTaskModal() {
   const modal = $('new-task-modal');
   const wsSel = $('nt-workspace');
-  // Popula workspaces (a partir de state.workspaces, exceto o __none__)
-  const opts = ['<option value="">—</option>'];
-  for (const ws of state.workspaces) {
-    if (ws.id === '__none__') continue;
+  const stageSel = $('nt-stage');
+  const catSel = $('nt-category');
+
+  // Workspaces: prefere a lista de /workspaces; fallback nos derivados
+  const wsList = state.apiWorkspaces.length
+    ? state.apiWorkspaces
+    : state.workspaces.filter((w) => w.id !== '__none__');
+  const opts = ['<option value="">— sem workspace —</option>'];
+  for (const ws of wsList) {
     opts.push(`<option value="${escapeHtml(ws.id)}">${escapeHtml(ws.name)}</option>`);
   }
   wsSel.innerHTML = opts.join('');
-  if (state.selectedWorkspaceId && state.selectedWorkspaceId !== '__none__') {
-    wsSel.value = state.selectedWorkspaceId;
-  }
+  const preWs = state.selectedWorkspaceId && state.selectedWorkspaceId !== '__none__'
+    ? state.selectedWorkspaceId : '';
+  wsSel.value = preWs;
 
-  const catSel = $('nt-category');
-  const repopulateCats = () => populateCategorySelect(catSel, catSel.value, wsSel.value || null);
+  populateStageSelect(stageSel, wsSel.value || null, '');
   populateCategorySelect(catSel, state.filterCategoryId || '', wsSel.value || null);
-  wsSel.onchange = repopulateCats;
+
+  wsSel.onchange = () => {
+    populateStageSelect(stageSel, wsSel.value || null, '');
+    populateCategorySelect(catSel, catSel.value, wsSel.value || null);
+  };
 
   $('nt-title').value = '';
   $('nt-priority').value = '';
@@ -1285,8 +1352,10 @@ $('new-task-form').addEventListener('submit', async (e) => {
     return;
   }
   const payload = { title, status: 'todo' };
+  const stage = $('nt-stage').value;
   const ws = $('nt-workspace').value;
-  if (ws) payload.workspace_id = ws;
+  if (stage) payload.stage_id = stage;
+  else if (ws) payload.workspace_id = ws;
   const cat = $('nt-category').value;
   if (cat) payload.category_id = cat;
   const priority = $('nt-priority').value;
@@ -1368,7 +1437,7 @@ window.widget.updater.onStatus((s) => {
       openApiKeyScreen({ canSkip: false });
       return;
     }
-    await loadTasks();
+    await Promise.all([loadWorkspaces(), loadTasks()]);
     resumeOrShowWorkspaces();
   } else {
     showScreen('login');

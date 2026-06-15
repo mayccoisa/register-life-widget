@@ -504,9 +504,13 @@ main { flex: 1; overflow: hidden; position: relative; }
 .task-status.paused { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
 
 /* ---------- Task details ---------- */
-.details-body {
+.details-scroll {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.details-body {
   padding: 14px 16px;
   display: flex;
   flex-direction: column;

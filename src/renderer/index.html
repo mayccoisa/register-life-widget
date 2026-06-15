@@ -16,7 +16,7 @@
       <button id="btn-apikey" title="API Key" hidden>🔑</button>
       <button id="btn-refresh" title="Atualizar" hidden>↻</button>
       <button id="btn-logout" title="Sair da conta" hidden>⎋</button>
-      <button id="btn-hide" title="Ocultar (Ctrl+Shift+T)">—</button>
+      <button id="btn-hide" title="Ocultar">—</button>
       <button id="btn-quit" title="Fechar app">×</button>
     </div>
   </header>
@@ -133,6 +133,10 @@
           <select id="nt-workspace"></select>
         </label>
         <label>
+          <span>Etapa (kanban)</span>
+          <select id="nt-stage"></select>
+        </label>
+        <label>
           <span>Categoria</span>
           <select id="nt-category"></select>
         </label>
@@ -140,9 +144,10 @@
           <span>Prioridade</span>
           <select id="nt-priority">
             <option value="">—</option>
-            <option value="low">Baixa</option>
-            <option value="medium">Média</option>
-            <option value="high">Alta</option>
+            <option value="urgent_important">🔴 Urgente e importante</option>
+            <option value="not_urgent_important">🟠 Importante (agendar)</option>
+            <option value="urgent_not_important">🟢 Urgente (delegar)</option>
+            <option value="not_urgent_not_important">⬜ Nem urgente nem importante</option>
           </select>
         </label>
         <label>
@@ -164,6 +169,7 @@
     <!-- Task Details -->
     <section id="screen-details" class="screen">
       <div id="error-banner-details" class="error-banner" hidden></div>
+      <div class="details-scroll">
       <div class="details-body" id="details-body"></div>
 
       <div class="details-edit">
@@ -185,12 +191,17 @@
             <span>Prioridade</span>
             <select id="edit-priority">
               <option value="">—</option>
-              <option value="low">Baixa</option>
-              <option value="medium">Média</option>
-              <option value="high">Alta</option>
+              <option value="urgent_important">🔴 Urgente e importante</option>
+              <option value="not_urgent_important">🟠 Importante (agendar)</option>
+              <option value="urgent_not_important">🟢 Urgente (delegar)</option>
+              <option value="not_urgent_not_important">⬜ Nem urgente nem importante</option>
             </select>
           </label>
         </div>
+        <label>
+          <span>Workspace / Etapa</span>
+          <select id="edit-stage"></select>
+        </label>
         <label>
           <span>Categoria</span>
           <select id="edit-category"></select>
@@ -210,6 +221,7 @@
           <textarea id="edit-notes" rows="3" maxlength="2000" placeholder="Adicione uma observação…"></textarea>
         </label>
         <button id="btn-save-details" class="btn-primary" disabled>Salvar alterações</button>
+      </div>
       </div>
 
       <div class="details-actions">

@@ -12,3 +12,8 @@ build/icon.ico
 
 # Configurações locais
 .claude/
+
+# Testes E2E (artefatos locais e segredo extraído em runtime)
+tests/.runtime/
+test-results/
+playwright-report/

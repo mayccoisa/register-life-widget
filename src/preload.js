@@ -17,12 +17,19 @@ contextBridge.exposeInMainWorld('widget', {
     setApiKey: (apiKey) => invoke('auth:setApiKey', { apiKey }),
   },
 
+  workspaces: {
+    list: () => invoke('workspaces:list'),
+    stages: (workspaceId) => invoke('workspaces:stages', { workspaceId }),
+    categories: (workspaceId) => invoke('workspaces:categories', { workspaceId }),
+  },
+
   tasks: {
     list: () => invoke('tasks:list'),
     get: (id) => invoke('tasks:get', id),
     setStatus: (id, status) => invoke('tasks:setStatus', { id, status }),
     create: (payload) => invoke('tasks:create', payload),
     update: (id, payload) => invoke('tasks:update', { id, payload }),
+    delete: (id) => invoke('tasks:delete', id),
   },
 
   timer: {
