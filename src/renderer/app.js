@@ -790,8 +790,18 @@ function renderDetails(task) {
   };
 
   populateCategorySelect(fields.category, original.category_id, task.workspace?.id || null);
+  // O <select> só representa o que está na lista. Se o valor atual não puder ser
+  // representado, o campo cai pra '' — por isso o baseline tem que bater com o que
+  // o select realmente mostra, senão um save manda null e desvincula a tarefa.
+  original.category_id = fields.category.value;
+
+  let stageReady = false;
   populateStageSelect(fields.stage, task.workspace?.id || null, original.stage_id)
-    .then(() => { refreshDirty(); });
+    .then(() => {
+      original.stage_id = fields.stage.value;
+      stageReady = true;
+      refreshDirty();
+    });
 
   fields.title.value    = original.title;
   fields.status.value   = original.status;
@@ -825,18 +835,18 @@ function renderDetails(task) {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Salvando…';
     try {
-      // PATCH /tasks/:id aceita todos os campos editáveis (inclusive status),
-      // então mandamos tudo numa request só. category_id é envio "best-effort":
-      // a doc oficial não lista categoria como editável.
+      // status vai pelo endpoint dedicado (/tasks/:id/status); o PATCH genérico
+      // não persiste status de forma confiável. category_id é envio "best-effort".
+      // stage_id só entra se o select de etapa já carregou — assim nunca mandamos
+      // null por engano e desvinculamos a tarefa do workspace/kanban.
       const patch = {};
       if (c.title !== original.title) patch.title = c.title;
       if (c.priority !== original.priority) patch.priority = c.priority || null;
-      if (c.stage_id !== original.stage_id) patch.stage_id = c.stage_id || null;
+      if (stageReady && c.stage_id !== original.stage_id) patch.stage_id = c.stage_id || null;
       if (c.category_id !== original.category_id) patch.category_id = c.category_id || null;
       if (c.due_date !== original.due_date) patch.due_date = c.due_date || null;
       if (c.due_time !== original.due_time) patch.due_time = c.due_time || null;
       if (c.description !== original.description) patch.description = c.description;
-      if (c.status !== original.status) patch.status = c.status;
 
       if (Object.keys(patch).length) {
         const r = await window.widget.tasks.update(task.id, patch);
@@ -846,6 +856,17 @@ function renderDetails(task) {
           return;
         }
       }
+
+      // Status pelo endpoint próprio, só quando mudou de fato.
+      if (c.status !== original.status) {
+        const rs = await window.widget.tasks.setStatus(task.id, c.status);
+        if (handleApiError(rs, 'Falha ao salvar status', 'error-banner-details')) {
+          saveBtn.textContent = 'Salvar alterações';
+          saveBtn.disabled = false;
+          return;
+        }
+      }
+
       await loadTasks();
       const updated = state.allTasks.find((t) => t.id === task.id) || { ...task, ...c };
       renderDetails(updated);
